@@ -2,110 +2,80 @@
 
 // TODO. This file could use a lot of improvement using interfaces and smart array handling.
 // TODO. All strings here should be handled by `constants.h`.
-REC_Particle::REC_Particle() {
-    nrows   = 0;
-    pid     = {};
-    px      = {};
-    py      = {};
-    pz      = {};
-    vx      = {};
-    vy      = {};
-    vz      = {};
-    vt      = {};
-    charge  = {};
-    beta    = {};
-    chi2pid = {};
-    status  = {};
+// Write.
+REC_Particle::REC_Particle() { // TODO. Can be made *partialy* generic.
+    nrows = 0;
+    bank_name = "REC::Particle";
+    data = {
+            {"pid",     {nullptr, {}}}, // particle id in LUND conventions.
+            {"px",      {nullptr, {}}}, // x component of the momentum (GeV).
+            {"py",      {nullptr, {}}}, // y component of the momentum (GeV).
+            {"pz",      {nullptr, {}}}, // z component of the momentum (GeV).
+            {"vx",      {nullptr, {}}}, // x component of the vertex (cm).
+            {"vy",      {nullptr, {}}}, // y component of the vertex (cm).
+            {"vz",      {nullptr, {}}}, // z component of the vertex (cm).
+            {"vt",      {nullptr, {}}}, // RF and z corrected vertex time (ns).
+            {"charge",  {nullptr, {}}}, // particle charge.
+            {"beta",    {nullptr, {}}}, // particle beta measured by TOF.
+            {"chi2pid", {nullptr, {}}}, // Chi2 of assigned PID.
+            {"status",  {nullptr, {}}}, // Detector collection particle passed.
+    };
 }
-REC_Particle::REC_Particle(TTree *t) {
-    pid     = nullptr; b_pid     = nullptr;
-    px      = nullptr; b_px      = nullptr;
-    py      = nullptr; b_py      = nullptr;
-    pz      = nullptr; b_pz      = nullptr;
-    vx      = nullptr; b_vx      = nullptr;
-    vy      = nullptr; b_vy      = nullptr;
-    vz      = nullptr; b_vz      = nullptr;
-    vt      = nullptr; b_vt      = nullptr;
-    charge  = nullptr; b_charge  = nullptr;
-    beta    = nullptr; b_beta    = nullptr;
-    chi2pid = nullptr; b_chi2pid = nullptr;
-    status  = nullptr; b_status  = nullptr;
-    t->SetBranchAddress("REC::Particle::pid",     &pid,     &b_pid);
-    t->SetBranchAddress("REC::Particle::px",      &px,      &b_px);
-    t->SetBranchAddress("REC::Particle::py",      &py,      &b_py);
-    t->SetBranchAddress("REC::Particle::pz",      &pz,      &b_pz);
-    t->SetBranchAddress("REC::Particle::vx",      &vx,      &b_vx);
-    t->SetBranchAddress("REC::Particle::vy",      &vy,      &b_vy);
-    t->SetBranchAddress("REC::Particle::vz",      &vz,      &b_vz);
-    t->SetBranchAddress("REC::Particle::vt",      &vt,      &b_vt);
-    t->SetBranchAddress("REC::Particle::charge",  &charge,  &b_charge);
-    t->SetBranchAddress("REC::Particle::beta",    &beta,    &b_beta);
-    t->SetBranchAddress("REC::Particle::chi2pid", &chi2pid, &b_chi2pid);
-    t->SetBranchAddress("REC::Particle::status",  &status,  &b_status);
-}
-int REC_Particle::link_branches(TTree *t) {
-    t->Branch("REC::Particle::pid",     &pid);
-    t->Branch("REC::Particle::px",      &px);
-    t->Branch("REC::Particle::py",      &py);
-    t->Branch("REC::Particle::pz",      &pz);
-    t->Branch("REC::Particle::vx",      &vx);
-    t->Branch("REC::Particle::vy",      &vy);
-    t->Branch("REC::Particle::vz",      &vz);
-    t->Branch("REC::Particle::vt",      &vt);
-    t->Branch("REC::Particle::charge",  &charge);
-    t->Branch("REC::Particle::beta",    &beta);
-    t->Branch("REC::Particle::chi2pid", &chi2pid);
-    t->Branch("REC::Particle::status",  &status);
-    return 0;
-}
-int REC_Particle::set_nrows(int in_nrows) {
+int REC_Particle::set_nrows(int in_nrows) { // TODO. Can be made generic!
     nrows = in_nrows;
-    pid    ->resize(nrows);
-    px     ->resize(nrows);
-    py     ->resize(nrows);
-    pz     ->resize(nrows);
-    vx     ->resize(nrows);
-    vy     ->resize(nrows);
-    vz     ->resize(nrows);
-    vt     ->resize(nrows);
-    beta   ->resize(nrows);
-    chi2pid->resize(nrows);
-    charge ->resize(nrows);
-    status ->resize(nrows);
+    for (it = data.begin(); it != data.end(); ++it) it->second.second->resize(nrows);
     return 0;
 }
-int REC_Particle::get_nrows() {return nrows;}
-int REC_Particle::fill(hipo::bank b) {
+int REC_Particle::create_branches(TTree *t) { // TODO. Can be made generic!
+    for (it = data.begin(); it != data.end(); ++it)
+        t->Branch(Form("%s::%s", bank_name, it->first), &(it->second.second));
+    return 0;
+}
+int REC_Particle::fill(hipo::bank b) { // TODO. Cannot be made generic :(.
     set_nrows(b.getRows());
     for (int row = 0; row < nrows; ++row) {
-        pid    ->at(row) = b.getInt  ("pid",     row);
-        px     ->at(row) = b.getFloat("px",      row);
-        py     ->at(row) = b.getFloat("py",      row);
-        pz     ->at(row) = b.getFloat("pz",      row);
-        vx     ->at(row) = b.getFloat("vx",      row);
-        vy     ->at(row) = b.getFloat("vy",      row);
-        vz     ->at(row) = b.getFloat("vz",      row);
-        vt     ->at(row) = b.getFloat("vt",      row);
-        beta   ->at(row) = b.getFloat("beta",    row);
-        chi2pid->at(row) = b.getFloat("chi2pid", row);
-        charge ->at(row) = (int8_t)  b.getByte ("charge", row);
-        status ->at(row) = (int16_t) b.getShort("status", row);
+        data["pid"]    .second->at(row) = (Float_t) b.getInt  ("pid",     row);
+        data["px"]     .second->at(row) = b.getFloat("px",      row);
+        data["py"]     .second->at(row) = b.getFloat("py",      row);
+        data["pz"]     .second->at(row) = b.getFloat("pz",      row);
+        data["vx"]     .second->at(row) = b.getFloat("vx",      row);
+        data["vy"]     .second->at(row) = b.getFloat("vy",      row);
+        data["vz"]     .second->at(row) = b.getFloat("vz",      row);
+        data["vt"]     .second->at(row) = b.getFloat("vt",      row);
+        data["beta"]   .second->at(row) = b.getFloat("beta",    row);
+        data["chi2pid"].second->at(row) = b.getFloat("chi2pid", row);
+        data["charge"] .second->at(row) = (Float_t) b.getByte ("charge", row);
+        data["status"] .second->at(row) = (Float_t) b.getShort("status", row);
     }
     return 0;
 }
-int REC_Particle::get_entries(TTree *t, int idx) {
-    b_pid    ->GetEntry(t->LoadTree(idx));
-    b_px     ->GetEntry(t->LoadTree(idx));
-    b_py     ->GetEntry(t->LoadTree(idx));
-    b_pz     ->GetEntry(t->LoadTree(idx));
-    b_vx     ->GetEntry(t->LoadTree(idx));
-    b_vy     ->GetEntry(t->LoadTree(idx));
-    b_vz     ->GetEntry(t->LoadTree(idx));
-    b_vt     ->GetEntry(t->LoadTree(idx));
-    b_charge ->GetEntry(t->LoadTree(idx));
-    b_beta   ->GetEntry(t->LoadTree(idx));
-    b_chi2pid->GetEntry(t->LoadTree(idx));
-    b_status ->GetEntry(t->LoadTree(idx));
+
+// Read.
+REC_Particle::REC_Particle(TTree *t) { // TODO. Can be made *partially* generic!
+    nrows = 0;
+    bank_name = "REC::Particle";
+    data = {
+            {"pid",     {nullptr, nullptr}}, // particle id in LUND conventions.
+            {"px",      {nullptr, nullptr}}, // x component of the momentum (GeV).
+            {"py",      {nullptr, nullptr}}, // y component of the momentum (GeV).
+            {"pz",      {nullptr, nullptr}}, // z component of the momentum (GeV).
+            {"vx",      {nullptr, nullptr}}, // x component of the vertex (cm).
+            {"vy",      {nullptr, nullptr}}, // y component of the vertex (cm).
+            {"vz",      {nullptr, nullptr}}, // z component of the vertex (cm).
+            {"vt",      {nullptr, nullptr}}, // RF and z corrected vertex time (ns).
+            {"charge",  {nullptr, nullptr}}, // particle charge.
+            {"beta",    {nullptr, nullptr}}, // particle beta measured by TOF.
+            {"chi2pid", {nullptr, nullptr}}, // Chi2 of assigned PID.
+            {"status",  {nullptr, nullptr}}, // Detector collection particle passed.
+    };
+
+    for (it = data.begin(); it != data.end(); ++it)
+        t->SetBranchAddress(Form("%s::%s", bank_name, it->first),
+                            &(it->second.second), &(it->second.first));
+}
+int REC_Particle::get_nrows() {return nrows;} // TODO. Can be made generic!
+int REC_Particle::get_entries(TTree *t, int idx) { // TODO. Can be made generic!
+    for (it = data.begin(); it != data.end(); ++it) it->second.first->GetEntry(t->LoadTree(idx));
     return 0;
 }
 
@@ -129,7 +99,7 @@ REC_Track::REC_Track(TTree *t) {
     t->SetBranchAddress("REC::Track::ndf",    &ndf,    &b_ndf);
     t->SetBranchAddress("REC::Track::chi2",   &chi2,   &b_chi2);
 }
-int REC_Track::link_branches(TTree *t) {
+int REC_Track::create_branches(TTree *t) {
     t->Branch("REC::Track::index",  &index);
     t->Branch("REC::Track::pindex", &pindex);
     t->Branch("REC::Track::sector", &sector);
@@ -184,7 +154,7 @@ REC_Calorimeter::REC_Calorimeter(TTree *t) {
     t->SetBranchAddress("REC::Calorimeter::sector", &sector, &b_sector);
     t->SetBranchAddress("REC::Calorimeter::energy", &energy, &b_energy);
 }
-int REC_Calorimeter::link_branches(TTree *t) {
+int REC_Calorimeter::create_branches(TTree *t) {
     t->Branch("REC::Calorimeter::pindex", &pindex);
     t->Branch("REC::Calorimeter::layer",  &layer);
     t->Branch("REC::Calorimeter::sector", &sector);
@@ -229,7 +199,7 @@ REC_Scintillator::REC_Scintillator(TTree *t) {
     t->SetBranchAddress("REC::Scintillator::pindex", &pindex, &b_pindex);
     t->SetBranchAddress("REC::Scintillator::time",   &time,   &b_time);
 }
-int REC_Scintillator::link_branches(TTree *t) {
+int REC_Scintillator::create_branches(TTree *t) {
     t->Branch("REC::Scintillator::pindex", &pindex);
     t->Branch("REC::Scintillator::time",   &time);
     return 0;
@@ -255,48 +225,48 @@ int REC_Scintillator::get_entries(TTree *t, int idx) {
     return 0;
 }
 
-REC_Cherenkov::REC_Cherenkov() {
-    nrows  = 0;
-    pindex = {};
-    nphe   = {};
-}
-REC_Cherenkov::REC_Cherenkov(TTree *t) {
-    pindex   = nullptr; b_pindex   = nullptr;
-    detector = nullptr; b_detector = nullptr;
-    nphe     = nullptr; b_nphe     = nullptr;
-    t->SetBranchAddress("REC::Cherenkov::pindex",   &pindex,   &b_pindex);
-    t->SetBranchAddress("REC::Cherenkov::detector", &detector, &b_detector);
-    t->SetBranchAddress("REC::Cherenkov::nphe",     &nphe,     &b_nphe);
-}
-int REC_Cherenkov::link_branches(TTree *t) {
-    t->Branch("REC::Cherenkov::pindex",   &pindex);
-    t->Branch("REC::Cherenkov::detector", &detector);
-    t->Branch("REC::Cherenkov::nphe",     &nphe);
-    return 0;
-}
-int REC_Cherenkov::set_nrows(int in_nrows) {
-    nrows = in_nrows;
-    pindex  ->resize(nrows);
-    detector->resize(nrows);
-    nphe    ->resize(nrows);
-    return 0;
-}
-int REC_Cherenkov::get_nrows() {return nrows;}
-int REC_Cherenkov::fill(hipo::bank b) {
-    set_nrows(b.getRows());
-    for (int row = 0; row < nrows; ++row) {
-        pindex  ->at(row) = (int16_t) b.getShort("pindex", row);
-        detector->at(row) = (int8_t)  b.getByte("detector", row);
-        nphe    ->at(row) = b.getFloat("nphe", row);
-    }
-    return 0;
-}
-int REC_Cherenkov::get_entries(TTree *t, int idx) {
-    b_pindex  ->GetEntry(t->LoadTree(idx));
-    b_detector->GetEntry(t->LoadTree(idx));
-    b_nphe    ->GetEntry(t->LoadTree(idx));
-    return 0;
-}
+// REC_Cherenkov::REC_Cherenkov() {
+//     nrows  = 0;
+//     pindex = {};
+//     nphe   = {};
+// }
+// REC_Cherenkov::REC_Cherenkov(TTree *t) {
+//     pindex   = nullptr; b_pindex   = nullptr;
+//     detector = nullptr; b_detector = nullptr;
+//     nphe     = nullptr; b_nphe     = nullptr;
+//     t->SetBranchAddress("REC::Cherenkov::pindex",   &pindex,   &b_pindex);
+//     t->SetBranchAddress("REC::Cherenkov::detector", &detector, &b_detector);
+//     t->SetBranchAddress("REC::Cherenkov::nphe",     &nphe,     &b_nphe);
+// }
+// int REC_Cherenkov::create_branches(TTree *t) {
+//     t->Branch("REC::Cherenkov::pindex",   &pindex);
+//     t->Branch("REC::Cherenkov::detector", &detector);
+//     t->Branch("REC::Cherenkov::nphe",     &nphe);
+//     return 0;
+// }
+// int REC_Cherenkov::set_nrows(int in_nrows) {
+//     nrows = in_nrows;
+//     pindex  ->resize(nrows);
+//     detector->resize(nrows);
+//     nphe    ->resize(nrows);
+//     return 0;
+// }
+// int REC_Cherenkov::get_nrows() {return nrows;}
+// int REC_Cherenkov::fill(hipo::bank b) {
+//     set_nrows(b.getRows());
+//     for (int row = 0; row < nrows; ++row) {
+//         pindex  ->at(row) = (int16_t) b.getShort("pindex", row);
+//         detector->at(row) = (int8_t)  b.getByte("detector", row);
+//         nphe    ->at(row) = b.getFloat("nphe", row);
+//     }
+//     return 0;
+// }
+// int REC_Cherenkov::get_entries(TTree *t, int idx) {
+//     b_pindex  ->GetEntry(t->LoadTree(idx));
+//     b_detector->GetEntry(t->LoadTree(idx));
+//     b_nphe    ->GetEntry(t->LoadTree(idx));
+//     return 0;
+// }
 
 FMT_Tracks::FMT_Tracks() {
     index = {};
@@ -326,7 +296,7 @@ FMT_Tracks::FMT_Tracks(TTree *t) {
     t->SetBranchAddress("FMT::Tracks::py",    &py,    &b_py);
     t->SetBranchAddress("FMT::Tracks::pz",    &pz,    &b_pz);
 }
-int FMT_Tracks::link_branches(TTree *t) {
+int FMT_Tracks::create_branches(TTree *t) {
     t->Branch("FMT::Tracks::index", &index);
     t->Branch("FMT::Tracks::ndf",   &ndf);
     t->Branch("FMT::Tracks::vx",    &vx);

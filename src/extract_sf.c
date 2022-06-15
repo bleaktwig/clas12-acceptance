@@ -136,7 +136,9 @@ int run(char *in_filename, bool use_fmt, int nevn) {
         ft.get_entries(t, evn);
 
         // Filter events without the necessary banks.
-        if (rp.vz->size() == 0 || rt.pindex->size() == 0 || rc.pindex->size() == 0) continue;
+        if (rp.data["vz"].second->size() == 0 || rt.pindex->size() == 0
+                || rc.pindex->size() == 0)
+            continue;
 
         for (UInt_t pos = 0; pos < rt.index->size(); ++pos) {
             // Get basic data from track and particle banks.
@@ -150,10 +152,14 @@ int run(char *in_filename, bool use_fmt, int nevn) {
                 if (ft.pz->size() < 1)      continue; // Track reconstructed by FMT.
                 if (ft.ndf->at(index) != 3) continue; // Track crossed 3 FMT layers.
 
-                px = ft.px->at(index); py = ft.py->at(index); pz = ft.pz->at(index);
+                px = ft.px->at(index);
+                py = ft.py->at(index);
+                pz = ft.pz->at(index);
             }
             else {
-                px = rp.px->at(pindex); py = rp.py->at(pindex); pz = rp.pz->at(pindex);
+                px = rp.data["px"].second->at(pindex);
+                py = rp.data["py"].second->at(pindex);
+                pz = rp.data["pz"].second->at(pindex);
             }
             double tot_P = calc_magnitude(px, py, pz);
 

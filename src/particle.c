@@ -49,10 +49,20 @@ particle particle_init(int pid, int charge, double beta, int status, int sector,
 particle particle_init(REC_Particle * rp, REC_Track * rt, int pos) {
     int pindex = rt->pindex->at(pos); // pindex is always equal to pos!
 
-    return particle_init(rp->pid->at(pindex), rp->charge->at(pindex), rp->beta->at(pindex),
-                         rp->status->at(pindex), rt->sector->at(pos),
-                         rp->vx->at(pindex), rp->vy->at(pindex), rp->vz->at(pindex),
-                         rp->px->at(pindex), rp->py->at(pindex), rp->pz->at(pindex));
+
+    return particle_init(
+            rp->data["pid"]   .second->at(pindex),
+            rp->data["charge"].second->at(pindex),
+            rp->data["beta"]  .second->at(pindex),
+            rp->data["status"].second->at(pindex),
+            rt->sector->at(pos),
+            rp->data["vx"]    .second->at(pindex),
+            rp->data["vy"]    .second->at(pindex),
+            rp->data["vz"]    .second->at(pindex),
+            rp->data["px"]    .second->at(pindex),
+            rp->data["py"]    .second->at(pindex),
+            rp->data["pz"]    .second->at(pindex)
+    );
 }
 
 // Initialize a new particle from the particle, tracks, and FMT banks.
@@ -64,10 +74,18 @@ particle particle_init(REC_Particle * rp, REC_Track * rt, FMT_Tracks * ft, int p
     if (ft->vz->size() < 1)               return particle_init(); // Track reconstructed by FMT.
     if (ft->ndf->at(index) < FMTNLYRSCUT) return particle_init(); // Track crossed 3 FMT layers.
 
-    return particle_init(rp->pid->at(pindex), rp->charge->at(pindex), rp->beta->at(pindex),
-                         rp->status->at(pindex), rt->sector->at(pos),
-                         ft->vx->at(index), ft->vy->at(index), ft->vz->at(index),
-                         ft->px->at(index), ft->py->at(index), ft->pz->at(index));
+    return particle_init(
+            rp->data["pid"]   .second->at(pindex),
+            rp->data["charge"].second->at(pindex),
+            rp->data["beta"]  .second->at(pindex),
+            rp->data["status"].second->at(pindex),
+            rt->sector->at(pos),
+            ft->vx->at(index),
+            ft->vy->at(index),
+            ft->vz->at(index),
+            ft->px->at(index),
+            ft->py->at(index),
+            ft->pz->at(index));
 }
 
 // === PARTICLE FUNCTIONS ==========================================================================

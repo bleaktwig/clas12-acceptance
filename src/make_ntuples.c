@@ -68,7 +68,7 @@ int run(char * in_filename, bool use_fmt, bool debug, int nevn, int run_no, doub
         ft.get_entries(t_in, evn);
 
         // Filter events without the necessary banks.
-        if (rp.vz->size() == 0 || rt.pindex->size() == 0) continue;
+        if (rp.data["vz"].second->size() == 0 || rt.pindex->size() == 0) continue;
 
         // Find trigger electron's TOF.
         int tre_pindex = rt.pindex->at(0);
@@ -108,7 +108,7 @@ int run(char * in_filename, bool use_fmt, bool debug, int nevn, int run_no, doub
                 if (rs.pindex->at(i) == pindex && rs.time->at(i) < tof) tof = rs.time->at(i);
 
             // Get miscellaneous data.
-            int status  = rp.status->at(pindex);
+            int status  = rp.data["status"].second->at(pindex);
             double chi2 = rt.chi2  ->at(pos);
             double ndf  = rt.ndf   ->at(pos);
 
