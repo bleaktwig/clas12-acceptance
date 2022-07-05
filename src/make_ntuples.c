@@ -62,14 +62,26 @@ double get_tof(REC_Scintillator rsci, REC_Calorimeter  rcal, int pindex) {
     return tof;
 }
 
-int run(char * in_filename, bool debug, int nevn, int run_no, double beam_E) {
-    // Extract sampling fraction parameters.
-    double sf_params[NSECTORS][SF_NPARAMS][2];
-    if (get_sf_params(Form("../data/sf_params_%06d.root", run_no), sf_params)) return 8;
+int run(char * in_filename, bool use_simul,bool debug, int nevn, int run_no, double beam_E) {
+    double sf_params[NSECTORS][SF_NPARAMS][2] = {{{0.246,0.0140},{0.985,1.},{0.083,0.},{-0.031,0.}},
+                                                 {{0.255,0.0150},{0.985,1.},{0.043,0.},{-0.024,0.}},
+                                                 {{0.245,0.0130},{0.985,1.},{0.067,0.},{-0.025,0.}},
+                                                 {{0.245,0.0140},{0.985,1.},{0.048,0.},{-0.016,0.}},
+                                                 {{0.252,0.0130},{0.985,1.},{0.007,0.},{-0.007,0.}},
+                                                 {{0.242,0.0140},{0.985,1.},{0.095,0.},{-0.038,0.}}};
+    char*  out_filename = (char *) malloc(128 * sizeof(char));
+    if(!use_simul){
+        // Extract sampling fraction parameters.
+        if (get_sf_params(Form("../data/sf_params_%06d.root", run_no), sf_params)) return 8;
+        sprintf(out_filename, "../root_io/banks_%06d.root", run_no);
+    } else{
+        sprintf(out_filename, "ntuple_%s", in_filename);
+    }
 
     // Access input file. TODO. Make this input file*s*, as in multiple files.
     TFile *f_in  = TFile::Open(in_filename, "READ");
-    TFile *f_out = TFile::Open("../root_io/ntuples.root", "RECREATE"); // NOTE. This path sucks.
+    TFile *f_out = TFile::Open(out_filename, "RECREATE"); // NOTE. This path sucks. // EM: yes, it does
+
     if (!f_in || f_in->IsZombie()) return 1;
 
     // Generate lists of variables.
@@ -81,6 +93,7 @@ int run(char * in_filename, bool debug, int nevn, int run_no, double beam_E) {
 
     // Create TTree and TNTuples.
     TTree   * t_in  = f_in->Get<TTree>("Tree");
+    if(t_in==NULL) return 1;
     TNtuple * t_out[2];
     t_out[0] = new TNtuple(S_DC,  S_DC,  vars);
     t_out[1] = new TNtuple(S_FMT, S_FMT, vars);
@@ -131,7 +144,94 @@ int run(char * in_filename, bool debug, int nevn, int run_no, double beam_E) {
         float tre_tof = get_tof(rsci, rcal, rtrk.pindex->at(0));
 
         // Process DIS event.
+        // Finding electron via reconstruction PID.
+        bool   el_trigger_exist   = false;
+        int    el_trigger_pindex  = 0;
+        UInt_t el_trigger_pos     = 0;
+
         for (UInt_t pos = 0; pos < rtrk.index->size(); ++pos) {
+            int pindex = rtrk.pindex->at(pos); // pindex is always equal to pos!
+            int status = rpart.status->at(pindex);
+            int pid    = rpart.pid->at(pindex);
+            
+            if (pid==11 && status<0){el_trigger_exist = true; el_trigger_pindex = pindex; el_trigger_pos = pos; break;}
+        }
+
+        // Guarding statement.
+        if (!el_trigger_exist) continue;
+        
+        // Process the trigger electron.
+        particle p_el[2];
+        {
+            // Get reconstructed particle from DC and from FMT.
+            p_el[0] = particle_init(&rpart, &rtrk, el_trigger_pos);        // DC.
+            p_el[1] = particle_init(&rpart, &rtrk, &ftrk, el_trigger_pos); // FMT.
+
+            // Get deposited energy.
+            float pcal_E = 0; // PCAL total deposited energy.
+            float ecin_E = 0; // EC inner total deposited energy.
+            float ecou_E = 0; // EC outer total deposited energy.
+            for (UInt_t i = 0; i < rcal.pindex->size(); ++i) {
+                if (rcal.pindex->at(i) != el_trigger_pindex) continue;
+                int lyr = (int) rcal.layer->at(i);
+
+                if      (lyr == PCAL_LYR) pcal_E += rcal.energy->at(i);
+                else if (lyr == ECIN_LYR) ecin_E += rcal.energy->at(i);
+                else if (lyr == ECOU_LYR) ecou_E += rcal.energy->at(i);
+                else return 2;
+            }
+            float tot_E = pcal_E + ecin_E + ecou_E;
+
+            // Get Cherenkov counters data.
+            int htcc_nphe = 0; // Number of photoelectrons deposited in htcc.
+            int ltcc_nphe = 0; // Number of photoelectrons deposited in ltcc.
+            for (UInt_t i = 0; i < rche.pindex->size(); ++i) {
+                if (rche.pindex->at(i) == el_trigger_pindex) {
+                    int detector = rche.detector->at(i);
+                    if      (detector == HTCC_ID) htcc_nphe += rche.nphe->at(i);
+                    else if (detector == LTCC_ID) ltcc_nphe += rche.nphe->at(i);
+                    else return 3;
+                }
+            }
+
+            // Get TOF.
+            float tof = get_tof(rsci, rcal, el_trigger_pindex);
+
+            // Get miscellaneous data.
+            int status = rpart.status->at(el_trigger_pindex);
+            float chi2 = rtrk.chi2   ->at(el_trigger_pos);
+            float ndf  = rtrk.ndf    ->at(el_trigger_pos);
+
+            // Assign PID.
+            for (int pi = 0; pi < 2; ++pi) {
+                set_pid(&(p_el[pi]), rpart.pid->at(el_trigger_pindex), status, tot_E, pcal_E, htcc_nphe,
+                        ltcc_nphe, sf_params[rtrk.sector->at(el_trigger_pos)]);
+            }
+
+            // Fill TNtuples. 
+            // TODO. This probably should be implemented more elegantly.
+            for (int pi = 0; pi < 2; ++pi) {
+                if (!p_el[pi].is_valid) continue;
+
+                Float_t v[VAR_LIST_SIZE] = {
+                        (Float_t) run_no, (Float_t) evn, (Float_t) beam_E,
+                        (Float_t) p_el[pi].pid, (Float_t) status, (Float_t) p_el[pi].q, p_el[pi].mass,
+                        p_el[pi].vx, p_el[pi].vy, p_el[pi].vz, p_el[pi].px, p_el[pi].py, p_el[pi].pz,
+                        P(p_el[pi]), theta_lab(p_el[pi]), phi_lab(p_el[pi]), p_el[pi].beta,
+                        chi2, ndf,
+                        pcal_E, ecin_E, ecou_E, tot_E,
+                        (tof - tre_tof),
+                        Q2(p_el[pi], beam_E), nu(p_el[pi], beam_E),
+                        Xb(p_el[pi], beam_E), W2(p_el[pi], beam_E),
+                        0, 0, 0,
+                        0, 0
+                };
+                t_out[pi]->Fill(v);
+            }
+        }
+        // Processing particles.
+        for (UInt_t pos = 0; pos < rtrk.index->size(); ++pos) {
+            if (pos == el_trigger_pos) continue; // trigger electron was already processed.
             int pindex = rtrk.pindex->at(pos); // pindex is always equal to pos!
 
             // Get reconstructed particle from DC and from FMT.
@@ -180,21 +280,23 @@ int run(char * in_filename, bool debug, int nevn, int run_no, double beam_E) {
                         ltcc_nphe, sf_params[rtrk.sector->at(pos)]);
             }
 
-            // Fill TNtuples. TODO. This probably should be implemented more elegantly.
-            // NOTE. If adding new variables, check their order in S_VAR_LIST.
+            // Fill TNtuples. 
+            // TODO. This probably should be implemented more elegantly.
             for (int pi = 0; pi < 2; ++pi) {
                 if (!p[pi].is_valid) continue;
 
                 Float_t v[VAR_LIST_SIZE] = {
                         (Float_t) run_no, (Float_t) evn, (Float_t) beam_E,
                         (Float_t) p[pi].pid, (Float_t) status, (Float_t) p[pi].q, p[pi].mass,
-                                p[pi].vx, p[pi].vy, p[pi].vz, p[pi].px, p[pi].py, p[pi].pz,
-                                P(p[pi]), theta_lab(p[pi]), phi_lab(p[pi]), p[pi].beta,
+                        p[pi].vx, p[pi].vy, p[pi].vz, p[pi].px, p[pi].py, p[pi].pz,
+                        P(p[pi]), theta_lab(p[pi]), phi_lab(p[pi]), p[pi].beta,
                         chi2, ndf,
                         pcal_E, ecin_E, ecou_E, tot_E,
                         (tof - tre_tof),
                         Q2(p[pi], beam_E), nu(p[pi], beam_E),
-                                Xb(p[pi], beam_E), W2(p[pi], beam_E)
+                        Xb(p[pi], beam_E), W2(p[pi], beam_E),
+                        zh(p[pi],p_el[pi], beam_E), Pt2(p[pi],p_el[pi], beam_E), Pl2(p[pi],p_el[pi], beam_E),
+                        phi_pq(p[pi],p_el[pi], beam_E), theta_pq(p[pi],p_el[pi], beam_E)
                 };
                 t_out[pi]->Fill(v);
             }
@@ -220,13 +322,15 @@ int run(char * in_filename, bool debug, int nevn, int run_no, double beam_E) {
 // Call program from terminal, C-style.
 int main(int argc, char ** argv) {
     bool debug         = false;
+    bool use_simul     = false;
     int nevn           = -1;
     int run_no         = -1;
     double beam_E      = -1;
     char * in_filename = NULL;
 
     if (make_ntuples_handle_args_err(make_ntuples_handle_args(argc, argv, &debug, &nevn,
-            &in_filename, &run_no, &beam_E), &in_filename, run_no))
+            &use_simul, &in_filename, &run_no, &beam_E), &in_filename, run_no))
         return 1;
-    return make_ntuples_err(run(in_filename, debug, nevn, run_no, beam_E), &in_filename);
+
+    return make_ntuples_err(run(in_filename, use_simul, debug, nevn, run_no, beam_E), &in_filename);
 }
